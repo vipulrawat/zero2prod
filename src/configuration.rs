@@ -1,0 +1,44 @@
+//! src/configuration.rs
+
+#[derive(serde::Deserialize)]
+pub struct Settings {
+    pub database: DatabaseSettings,
+    pub application_port: u16
+}
+
+#[derive(serde::Deserialize)]
+pub struct DatabaseSettings {
+    pub username: String,
+    pub password: String,
+    pub port: u16,
+    pub host: String,
+    pub database_name: String
+}
+
+pub fn get_configurations() -> Result<Settings, config::ConfigError> {
+    // init config reader
+    let mut settings = config::Config::default();
+
+    // add configuration values from a file named `configuration`
+    settings.merge(config::File::with_name("configuration"))?;
+
+    // convert the configuration values
+    settings.try_into()
+}
+
+impl DatabaseSettings {
+    pub fn connection_string(&self) -> String {
+        format!(
+            // lol
+            "postgres://{}:{}@{}:{}/{}",
+            self.username, self.password, self.host, self.port, self.database_name
+        )
+    }
+
+    pub fn connection_string_without_db(&self) -> String {
+        format!(
+            "postgres://{}:{}@{}:{}",
+            self.username, self.password, self.host, self.port
+        )
+    }
+}
