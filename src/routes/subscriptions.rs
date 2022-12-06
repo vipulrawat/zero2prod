@@ -4,6 +4,7 @@ use actix_web::{web,HttpResponse};
 use sqlx::PgPool;
 use chrono::Utc;
 use uuid::Uuid;
+use tracing::Instrument;
 
 #[derive(serde::Deserialize)]
 pub struct FormData {
@@ -20,16 +21,20 @@ pub async fn subscribe(
     // Adding user info to logs improves the log
     // and providing good breadcrumbs for error tracing
     // BUT this falls under GDPR rules (should have some mechanism to delete these on user request)
-    log::info!(
-            "request_id {} - Adding '{}' '{}' as a new subscriber",
-            request_id,
-            form.email,
-            form.name
+    let request_span = tracing::info_span!(
+            // spans, like logs, have an associated level
+            // `info_span` creates a span at the info-level
+            "Adding new subscriber",
+            %request_id, // this is something new syntax no interpolation? What the fuck
+            subscriber_email = %form.email, // tracing provides key_value pair
+            subscriber_name = %form.name
     );
 
-    log::info!(
-            "request_id {} - Saving new subscriber details in the database",
-            request_id
+    // something is really wrong here, span is bad on Futures
+    let _request_span_guard = request_span.enter();
+
+    let query_span = tracing::info_span!(
+            "Saving new subscriber details in the database"
     );
 
     match sqlx::query!(
@@ -43,22 +48,19 @@ pub async fn subscribe(
             Utc::now()
     )
     .execute(pool.get_ref())
+    .instrument(query_span)
     .await
     {
         Ok(_) => {
-            log::info!(
-                    "request_id {} - New subscriber details have been saved",
-                    request_id
-            );
+
             HttpResponse::Ok().finish()
         }
         Err(e) => {
             // used {:?} std::fmt::Debug insteas of {} std::fmt::Display
             // Debug gives the raw error useful for debugging
             // Display is more suitable for showing error to user
-            log::error!(
-                    "request_id {} - Failed to execute query: {:?}",
-                    request_id,
+            tracing::error!(
+                    "Failed to execute query: {:?}",
                     e
             );
             HttpResponse::InternalServerError().finish()
