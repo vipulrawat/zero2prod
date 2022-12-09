@@ -22,30 +22,9 @@ pub struct FormData {
     )
 )]
 pub async fn subscribe(form: web::Form<FormData>, pool: web::Data<PgPool>) -> HttpResponse {
-    let query_span = tracing::info_span!("Saving new subscriber details in the database");
-
-    match sqlx::query!(
-        r#"
-            INSERT INTO subscriptions (id, email, name, subscribed_at)
-            VALUES ($1, $2, $3, $4)
-            "#,
-        Uuid::new_v4(),
-        form.email,
-        form.name,
-        Utc::now()
-    )
-    .execute(pool.get_ref())
-    .instrument(query_span)
-    .await
-    {
+    match insert_subscriber(&pool, &form).await {
         Ok(_) => HttpResponse::Ok().finish(),
-        Err(e) => {
-            // used {:?} std::fmt::Debug insteas of {} std::fmt::Display
-            // Debug gives the raw error useful for debugging
-            // Display is more suitable for showing error to user
-            tracing::error!("Failed to execute query: {:?}", e);
-            HttpResponse::InternalServerError().finish()
-        }
+        Err(_) => HttpResponse::InternalServerError().finish(),
     }
 }
 
